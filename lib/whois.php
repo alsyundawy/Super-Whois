@@ -53,49 +53,6 @@ function whoisGetWebLookupUrl(string $tld): ?string {
 }
 
 /**
- * Detects if the WHOIS response is solely a legal disclaimer without actual domain fields.
- * This is a heuristic approach to catch soft-blocks from registries.
- */
-function whoisIsDisclaimerOnly(array $lines): bool {
-    // 0. 狀態互斥檢查：若明確指示網域可註冊（未找到），則它不是單純的「免責聲明阻擋」。
-    // 這是修復邏輯短路的關鍵：未註冊的網域不會有資料標籤，但可能有免責聲明。
-    if (whoisIndicatesDomainAvailable($lines)) {
-        return false;
-    }
-
-    $raw = strtolower(implode("\n", $lines));
-
-    // 1. 若包含實質的網域資料標籤，則它不是「純」免責聲明。
-    $dataMarkers = [
-        'domain name:', 'domain:', 'registry domain id:', 'registrar:',
-        'creation date:', 'updated date:', 'name server:', 'nserver:',
-        'registrant:', 'domain status:', 'status:'
-    ];
-    foreach ($dataMarkers as $marker) {
-        if (str_contains($raw, $marker)) {
-            return false;
-        }
-    }
-
-    // 2. 在排除「可用」與「已註冊」後，尋找強烈的免責聲明阻擋指標。
-    $disclaimerIndicators = [
-        'terms of use',
-        'by submitting a whois query',
-        'compilation, repackaging, dissemination',
-        'whois database is provided',
-        'for information purposes only',
-        'restrict or terminate your access'
-    ];
-    foreach ($disclaimerIndicators as $indicator) {
-        if (str_contains($raw, $indicator)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-/**
  * True if WHOIS response clearly indicates access-denied/rate-limited.
  */
 function whoisLooksLikeDenied(array $lines): bool {
@@ -137,11 +94,7 @@ function whoisLooksLikeDenied(array $lines): bool {
         return true;
     }
 
-    // Detect disclaimer-only responses: legal text with no parseable WHOIS fields
-    if (whoisIsDisclaimerOnly($lines)) {
-        return true;
-    }
-
+    // FIX: Added explicit return false to satisfy the bool return type.
     return false;
 }
 

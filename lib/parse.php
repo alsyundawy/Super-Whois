@@ -73,6 +73,10 @@ function relativeTime(string $date, string $lang = 'en'): string {
 }
 
 /**
+ * Parse raw WHOIS lines into structured fields for display.
+ * Handles diverse formats from different registrars worldwide.
+ */
+/**
  * Extract a single field value from a WHOIS line.
  * Handles privacy filtering, nameserver splitting, status URL extraction.
  */
@@ -127,10 +131,6 @@ function _parseWhoisExtractField(string $line, string $pattern, string $field, b
     }
 }
 
-/**
- * Parse raw WHOIS lines into structured fields for display.
- * Handles diverse formats from different registrars worldwide.
- */
 function parseWhoisData(array $rawResult): array {
     $info = [
         'creation_date'      => null,
@@ -154,11 +154,11 @@ function parseWhoisData(array $rawResult): array {
     ];
     $patterns = [
         // ── Expiration dates (global variants) ─────────────────────────
-        '/^Registry Expiry Date\s*:/i'                               => ['expiration_date', true],
-        '/^Registrar Registration Expiration Date\s*:/i'             => ['expiration_date', true],
+        '/^Registry Expiry Date\s*:/i'                             => ['expiration_date', true],
+        '/^Registrar Registration Expiration Date\s*:/i'           => ['expiration_date', true],
         '/^(?:Expir(?:y|ation|es)\s*(?:Date|Time)|Expiration Time|paid-till|expire[sd]?|renewal[- ]?date)\s*:/i' => ['expiration_date', true],
         '/^(?:Valid Until|Valid Through|Domain Expires|Expiry\b)\s*:/i' => ['expiration_date', true],
-        '/^(?:expire|exp-date|expires-on)\s*:/i'                     => ['expiration_date', true],
+        '/^(?:expire|exp-date|expires-on)\s*:/i'                   => ['expiration_date', true],
         '/^free-date\s*:/i'                                        => ['expiration_date', true],
         '/^paid-till\s*:/i'                                        => ['expiration_date', true],
         '/^expires\s*:/i'                                          => ['expiration_date', true],
@@ -166,7 +166,7 @@ function parseWhoisData(array $rawResult): array {
         // ── Creation dates (global variants) ───────────────────────────
         '/^(?:Registry Creation Date|Creation Date|Registration Date|Registration Time|Created(?: Date)?|Registered (?:on|date)|Domain Registration Date|created)\s*:/i' => ['creation_date', true],
         '/^(?:Created On|First Registration Date|Registration effective date)\s*:/i' => ['creation_date', true],
-        '/^(?:domain_datecreated|Domain Name Commencement Date|created-date|create-date|created_at)\s*:/i' => ['creation_date', true],
+        '/^(?:domain_datecreated|created-date|create-date|created_at)\s*:/i' => ['creation_date', true],
         '/^created\s*:/i'                                          => ['creation_date', true],
         '/^nserver.*\s+from\s+/i'                                  => ['creation_date', true],
 
@@ -189,9 +189,9 @@ function parseWhoisData(array $rawResult): array {
         // ── Abuse contact ──────────────────────────────────────────────
         '/^Registrar Abuse Contact Email\s*:/i'                    => ['abuse_email', true],
         '/^Registrar Abuse Contact Phone\s*:/i'                    => ['abuse_phone', true],
-        '/^(?:abuse-mailbox|abuse-email|Abuse Contact)\s*:/i'      => ['abuse_email', true],
-        '/^(?:abuse-phone|Abuse Contact Phone)\s*:/i'              => ['abuse_phone', true],
-        '/^(?:% abuse.*contact.*email|abuse-mailbox)\s*:/i'        => ['abuse_email', true],
+        '/^(?:abuse-mailbox|abuse-email|Abuse Contact)\s*:/i'     => ['abuse_email', true],
+        '/^(?:abuse-phone|Abuse Contact Phone)\s*:/i'             => ['abuse_phone', true],
+        '/^(?:% abuse.*contact.*email|abuse-mailbox)\s*:/i'       => ['abuse_email', true],
 
         // ── Registrant info ────────────────────────────────────────────
         '/^Registrant Name\s*:/i'                                  => ['registrant_name', true],
@@ -200,8 +200,6 @@ function parseWhoisData(array $rawResult): array {
         '/^(?:person|Person)\s*:/i'                                => ['registrant_name', true],
         '/^(?:registrant-name|Registrant Contact)\s*:/i'           => ['registrant_name', true],
 
-        '/^Company English Name.*\s*:/i'                           => ['registrant_org', true], // .hk specifically
-        '/^Company name\s*:/i'                                     => ['registrant_org', true], // .hk specifically
         '/^(?:Registrant Organization|Registrant Organisation|Registrant Org)\s*:/i' => ['registrant_org', true],
         '/^(?:OrgName|netname|org-name|owner|Organization|Organisation)\s*:/i' => ['registrant_org', true],
         '/^(?:descr|Description)\s*:/i'                            => ['registrant_org', true],
@@ -209,19 +207,19 @@ function parseWhoisData(array $rawResult): array {
 
         '/^Registrant Country\s*:/i'                               => ['registrant_country', true],
         '/^country\s*:/i'                                          => ['registrant_country', true],
-        '/^(?:Registrant State|Registrant City)\s*:/i'              => ['registrant_country', true],
+        '/^(?:Registrant State|Registrant City)\s*:/i'             => ['registrant_country', true],
 
         '/^Registrant Email\s*:/i'                                 => ['registrant_email', true],
         '/^Registrant Contact Email\s*:/i'                         => ['registrant_email', true],
-        '/^(?:Registrant Email|e-mail|email)\s*:/i'                => ['registrant_email', true],
-        '/^(?:registrant-email|Registrant Email)\s*:/i'            => ['registrant_email', true],
+        '/^(?:Registrant Email|e-mail|email)\s*:/i'               => ['registrant_email', true],
+        '/^(?:registrant-email|Registrant Email)\s*:/i'           => ['registrant_email', true],
 
         '/^(?:Registrant Phone|Registrant Phone Ext|Registrant Phone Number)\s*:/i' => ['registrant_phone', true],
         '/^(?:phone|Phone|tel)\s*:/i'                              => ['registrant_phone', true],
         '/^(?:registrant-phone)\s*:/i'                             => ['registrant_phone', true],
 
         // ── Admin / Tech / Billing contacts ────────────────────────────
-        '/^Admin(?:istrative)?\s+Contact\s+Email\s*:/i'            => ['admin_email', true],
+        '/^Admin(?:istrative)?\s+Contact\s+Email\s*:/i'           => ['admin_email', true],
         '/^Admin Email\s*:/i'                                      => ['admin_email', true],
         '/^(?:admin-email|admin_email|Admin Contact Email)\s*:/i'  => ['admin_email', true],
         '/^(?:Administrative Contact Email)\s*:/i'                 => ['admin_email', true],
@@ -248,8 +246,9 @@ function parseWhoisData(array $rawResult): array {
         '/^DNSSEC\s*:/i'                                           => ['dnssec', true],
         '/^(?:dnssec|DNSSEC status)\s*:/i'                         => ['dnssec', true],
     ];
-
     // ── Fuzzy keyword groups for second-pass classification ───────────
+    // Maps field → array of keywords that appear in the label portion.
+    // Checked case-insensitively against the text BEFORE the colon.
     $fuzzyKeywords = [
         'expiration_date' => ['expir', 'valid until', 'valid through', 'renewal', 'paid-till', 'free-date', 'record expires', 'domain expires', 'exp-date'],
         'creation_date'   => ['creat', 'first registration', 'registration date', 'registration time', 'registered on', 'record created', 'domain registration', 'registration effective'],
@@ -272,52 +271,17 @@ function parseWhoisData(array $rawResult): array {
 
     $seen = [];
     $lineCount = count($rawResult);
-    $in_nameservers = false; // State-machine flag for keyless NS arrays (e.g., .hk)
-
     for ($idx = 0; $idx < $lineCount; $idx++) {
+        // trim() (not rtrim) so leading whitespace doesn't break ^ anchor matching.
+        // Many WHOIS servers indent their lines.
         $line = trim($rawResult[$idx]);
         if ($line === '' || $line[0] === '%' || $line[0] === '#') continue;
-
         // Skip comments and metadata lines (RIPE, APNIC, etc.)
-        if (preg_match('/^(?:remarks?|source|nic-hdl|mnt-by|role|abuse-c|rt)\s*:/i', $line)) {
-            $in_nameservers = false;
-            continue;
-        }
-        if (stripos($line, '>>>') !== false || stripos($line, '<<<') !== false) {
-            $in_nameservers = false;
-            continue;
-        }
+        if (preg_match('/^(?:remarks?|source|nic-hdl|mnt-by|role|abuse-c|rt)\s*:/i', $line)) continue;
+        if (stripos($line, '>>>') !== false || stripos($line, '<<<') !== false) continue;
         // Skip common registrar footer/notice lines
         if (preg_match('/^(?:NOTICE|Terms of Use|For more information|Please visit|The data|This whois|Service provided)\s/i', $line)) continue;
         if (preg_match('/^(?:%|% |>>>|<<<|---)/', $line)) continue;
-
-        // ── Nameserver Array State Machine (.hk registry specific) ────
-        // Triggers capturing when hitting block headers that trail with empty lines
-        if (preg_match('/^(?:Name Servers Information|Name Servers)\s*:?/i', $line)) {
-            $in_nameservers = true;
-            $val = trim(preg_replace('/^(?:Name Servers Information|Name Servers)\s*:?/i', '', $line));
-            if ($val !== '') {
-                $ns = strtolower(rtrim($val, '.'));
-                if (str_contains($ns, '.') && !preg_match('/^\d{1,3}(\.\d{1,3}){3}$/', $ns)) {
-                    if (!in_array($ns, $info['nameservers'], true)) $info['nameservers'][] = $ns;
-                }
-            }
-            continue;
-        }
-        
-        // While trapped in NS state, aggressively parse bare hostnames
-        if ($in_nameservers) {
-            if (preg_match('/^[\w\s-]+:/', $line)) {
-                // Next Keyed-value detected -> Escape the state machine
-                $in_nameservers = false; 
-            } else {
-                $ns = strtolower(rtrim($line, '.'));
-                if (str_contains($ns, '.') && !preg_match('/^\d{1,3}(\.\d{1,3}){3}$/', $ns)) {
-                    if (!in_array($ns, $info['nameservers'], true)) $info['nameservers'][] = $ns;
-                }
-                continue; // Prevent redundant pass 1 checks
-            }
-        }
 
         // ── Pass 1: Explicit regex patterns (exact match) ─────────────
         foreach ($patterns as $pattern => [$field, $single]) {
@@ -364,7 +328,6 @@ function parseWhoisData(array $rawResult): array {
             }
         }
     }
-    
     if (!empty($info['nameservers'])) sort($info['nameservers']);
     if ($info['dnssec'] !== null)
         $info['dnssec'] = str_contains(strtolower($info['dnssec']), 'unsigned') ? 'unsigned' : 'signed';

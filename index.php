@@ -1,6 +1,6 @@
 <?php
 /**
- * index.php — Super Whois v2.2.0
+ * index.php — Super Whois v2.2.1
  */
 define('RATE_LIMIT',  30);
 define('RATE_WINDOW', 3600);
@@ -17,6 +17,26 @@ if (!function_exists('idn_to_ascii')) {
 
 require_once __DIR__ . '/whois_core.php';
 require_once __DIR__ . '/languages.php';
+
+// ── SK Code validation (shared with API) ───────────────────────────────
+define('API_KEYS_FILE', __DIR__ . '/api_keys.php');
+
+function validateSKCode(string $key): bool {
+    if ($key === '' || !file_exists(API_KEYS_FILE)) return false;
+    $apiKeys = [];
+    require API_KEYS_FILE;
+    return in_array($key, $apiKeys, true);
+}
+
+// Check SK from POST or GET (localStorage handles persistence client-side)
+$skCode = '';
+if (!empty($_POST['sk']))    $skCode = trim($_POST['sk']);
+elseif (!empty($_GET['sk'])) $skCode = trim($_GET['sk']);
+
+$isSKValid = false;
+if ($skCode !== '') {
+    $isSKValid = validateSKCode($skCode);
+}
 
 // ── DNS AJAX endpoint ──────────────────────────────────────────────────
 if (isset($_GET['dns'])) {
@@ -68,12 +88,34 @@ if (isset($_GET['lang'])) {
 }
 $T = get_language_strings($lang);
 
-enforceRateLimit('web');
+if (!$isSKValid) {
+    enforceRateLimit('web');
+}
 
-// Query
+require_once __DIR__ . '/whois_servers.php';
+
+// Query — supports batch (comma-separated or newline-separated)
 $current_query = '';
-if (!empty($_POST['query']))    $current_query = sanitizeQuery($_POST['query']);
-elseif (!empty($_GET['query'])) $current_query = sanitizeQuery($_GET['query']);
+$batch_queries = [];
+if (!empty($_POST['query']))    $current_query = trim($_POST['query']);
+elseif (!empty($_GET['query'])) $current_query = trim($_GET['query']);
+
+if ($current_query !== '') {
+    // Split by comma or newline for batch queries
+    $raw_queries = preg_split('/[,\n]+/', $current_query);
+    $raw_queries = array_filter(array_map('trim', $raw_queries));
+    if (count($raw_queries) > 1) {
+        // Batch mode: multiple queries
+        foreach ($raw_queries as $rq) {
+            $sq = sanitizeQuery($rq);
+            if ($sq !== '') $batch_queries[] = $sq;
+        }
+        $current_query = sanitizeQuery($raw_queries[0]); // for display in input
+    } else {
+        $current_query = sanitizeQuery($current_query);
+        if ($current_query !== '') $batch_queries = [$current_query];
+    }
+}
 
 // ── Blocked/Restricted WHOIS detection ───────────────────────────────────
 
@@ -115,8 +157,7 @@ function renderDenialCard(string $domain, string $server, string $msg, ?string $
 
 // ── Result Rendering Functions ─────────────────────────────────────────────
 
-function renderDomainResult(string $domain, array $T, string $lang): void {
-    require_once __DIR__ . '/whois_servers.php';
+function renderDomainResult(string $domain, array $T, string $lang, array $whoisServers): void {
     $domainAscii = idn_to_ascii($domain, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46);
     if ($domainAscii === false) {
         echo renderErrorCard($T['invalid_query']); return;
@@ -566,11 +607,12 @@ function buildRawBlock(array $lines, array $T): string {
 <main>
   <div class="search-card">
     <form method="post" action="?lang=<?php echo $lang; ?>" autocomplete="off" id="search-form">
+      <input type="hidden" name="sk" id="sk-hidden">
       <div class="input-wrapper">
         <i class="fa-regular fa-clock input-icon-left"></i>
         <input type="text" name="query" id="query-input"
                placeholder="<?php echo htmlspecialchars($T['placeholder'], ENT_QUOTES, 'UTF-8'); ?>"
-               required spellcheck="false" maxlength="253"
+               required spellcheck="false" maxlength="10000"
                value="<?php echo htmlspecialchars($current_query, ENT_QUOTES, 'UTF-8'); ?>"
                autocomplete="off">
         <div id="autocomplete-dropdown" class="ac-dropdown" role="listbox"></div>
@@ -579,16 +621,64 @@ function buildRawBlock(array $lines, array $T): string {
         <i class="fa-solid fa-location-arrow" id="submit-icon"></i>
       </button>
     </form>
+    <div class="sk-row">
+      <i class="fa-solid fa-key sk-icon"></i>
+      <input type="text" id="sk-input" class="sk-input"
+             placeholder="<?php echo htmlspecialchars($T['sk_placeholder'], ENT_QUOTES, 'UTF-8'); ?>"
+             value="<?php echo htmlspecialchars($skCode, ENT_QUOTES, 'UTF-8'); ?>"
+             autocomplete="off" spellcheck="false">
+      <span id="sk-badge" class="sk-badge <?php echo $isSKValid ? 'sk-valid' : ($skCode !== '' ? 'sk-invalid' : 'sk-hidden'); ?>">
+        <?php if ($isSKValid): ?>
+          <i class="fa-solid fa-check"></i> SK Active
+        <?php elseif ($skCode !== ''): ?>
+          <i class="fa-solid fa-xmark"></i> Invalid
+        <?php endif; ?>
+      </span>
+    </div>
   </div>
 
   <?php
-  if ($current_query !== '') {
-    $qtype = classifyQuery($current_query);
-    switch ($qtype) {
-      case 'ipv4': case 'ipv6': renderIPResult($current_query, $T, $lang); break;
-      case 'asn':  renderASNResult($current_query, $T, $lang); break;
-      case 'domain': renderDomainResult($current_query, $T, $lang); break;
-      default: echo renderErrorCard($T['invalid_query']);
+  if (!empty($batch_queries)) {
+    $batchCount = count($batch_queries);
+    $isBatch = $batchCount > 1;
+    if ($isBatch) {
+      echo '<div id="batch-toolbar" class="batch-toolbar">';
+      echo '<div class="batch-toolbar-row">';
+      echo '<span class="batch-count">' . htmlspecialchars(sprintf($T['batch_count'] ?? 'Batch: %d queries', $batchCount), ENT_QUOTES, 'UTF-8') . '</span>';
+      if ($isSKValid) echo '<span class="sk-badge sk-valid"><i class="fa-solid fa-bolt"></i> No Rate Limit</span>';
+      echo '<div class="batch-filters" id="batch-filters"></div>';
+      echo '<div class="batch-actions">';
+      echo '<button class="batch-action-btn" id="batch-expand-all" title="Expand All"><i class="fa-solid fa-angles-down"></i></button>';
+      echo '<button class="batch-action-btn" id="batch-collapse-all" title="Collapse All"><i class="fa-solid fa-angles-up"></i></button>';
+      echo '</div>';
+      echo '</div>';
+      echo '</div>';
+      echo '<div id="batch-available-jump" class="batch-available-jump" style="display:none">';
+      echo '<i class="fa-solid fa-arrow-down"></i> <span id="batch-jump-text"></span>';
+      echo '</div>';
+    }
+    $idx = 0;
+    foreach ($batch_queries as $bq) {
+      $qtype = classifyQuery($bq);
+      if ($isBatch) {
+        echo '<div class="batch-item" data-index="' . $idx . '" data-status="pending">';
+        echo '<div class="batch-query-label" onclick="toggleBatchItem(this.parentElement)">';
+        echo '<i class="fa-solid fa-chevron-down batch-chevron"></i>';
+        echo '<span class="batch-query-text">' . htmlspecialchars($bq, ENT_QUOTES, 'UTF-8') . '</span>';
+        echo '<span class="batch-status-badge"></span>';
+        echo '</div>';
+        echo '<div class="batch-item-body">';
+      }
+      switch ($qtype) {
+        case 'ipv4': case 'ipv6': renderIPResult($bq, $T, $lang); break;
+        case 'asn':  renderASNResult($bq, $T, $lang); break;
+        case 'domain': renderDomainResult($bq, $T, $lang, $whoisServers); break;
+        default: echo renderErrorCard($T['invalid_query']);
+      }
+      if ($isBatch) {
+        echo '</div></div>';
+        $idx++;
+      }
     }
   }
   ?>
@@ -631,6 +721,38 @@ function buildRawBlock(array $lines, array $T): string {
 
 <script>
 (function(){
+  // ── SK Code localStorage ─────────────────────────────────────────────
+  const SK_KEY = 'swSK';
+  const skInput  = document.getElementById('sk-input');
+  const skHidden = document.getElementById('sk-hidden');
+  const skBadge  = document.getElementById('sk-badge');
+
+  // Load SK from localStorage if not set by server
+  try {
+    const saved = localStorage.getItem(SK_KEY);
+    if (saved && !skInput.value) {
+      skInput.value = saved;
+      skHidden.value = saved;
+    } else {
+      skHidden.value = skInput.value;
+    }
+  } catch(e) { skHidden.value = skInput.value; }
+
+  // Save SK to localStorage on change and sync hidden field
+  skInput.addEventListener('input', () => {
+    const v = skInput.value.trim();
+    skHidden.value = v;
+    try { if (v) localStorage.setItem(SK_KEY, v); else localStorage.removeItem(SK_KEY); } catch(e){}
+    // Reset badge while typing
+    skBadge.className = 'sk-badge sk-hidden';
+    skBadge.innerHTML = '';
+  });
+
+  // On form submit, ensure hidden SK field is current
+  document.getElementById('search-form').addEventListener('submit', () => {
+    skHidden.value = skInput.value.trim();
+  });
+
   // ── Theme ──────────────────────────────────────────────────────────────
   const TK = 'swTheme';
   const btn = document.getElementById('theme-toggle');
@@ -789,11 +911,13 @@ function buildRawBlock(array $lines, array $T): string {
   }
 
   function saveHistory(q) {
-    q = q.trim().toLowerCase();
+    q = q.trim();
     if (!q) return;
+    // Split batch queries — save each individually
+    const parts = q.split(/[,\n]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
     let h = []; try { h = JSON.parse(localStorage.getItem(HK)||'[]'); } catch(e){}
     if (!Array.isArray(h)) h = [];
-    h = h.filter(i => i !== q); h.push(q);
+    parts.forEach(p => { h = h.filter(i => i !== p); h.push(p); });
     if (h.length > 20) h.splice(0, h.length - 20);
     try { localStorage.setItem(HK, JSON.stringify(h)); } catch(e){}
   }
@@ -929,6 +1053,128 @@ function buildRawBlock(array $lines, array $T): string {
     c.style.display = v ? 'none' : 'block';
     btn3.textContent = v ? showRawTxt : hideRawTxt;
   };
+
+  // ── Batch post-processing ──────────────────────────────────────────────
+  const batchItems = document.querySelectorAll('.batch-item');
+  if (batchItems.length > 1) {
+    const counts = {available:0, registered:0, restricted:0, error:0};
+    const allTexts = [];
+    let firstAvail = null;
+
+    batchItems.forEach(item => {
+      const body = item.querySelector('.batch-item-body');
+      if (!body) return;
+      const html = body.innerHTML;
+      const label = item.querySelector('.batch-query-text');
+      const qname = label ? label.textContent : '';
+      allTexts.push(qname);
+
+      // Detect status from rendered content
+      let status = 'error';
+      if (html.includes('status-available') || html.includes('badge-avail')
+          || html.includes('<?php echo addslashes($T['domain_available']); ?>')) {
+        status = 'available';
+      } else if (html.includes('status-restricted') || html.includes('badge-restricted')
+                 || html.includes('<?php echo addslashes($T['status_restricted']); ?>')) {
+        status = 'restricted';
+      } else if (html.includes('rc-header') || html.includes('rc-domain')
+                 || html.includes('registrar-panel') || html.includes('badge-iana')) {
+        status = 'registered';
+      }
+      // Also check for IP/ASN results (have rc-header but no registrar-panel)
+      if (status === 'registered' && !html.includes('registrar-panel')
+          && !html.includes('rc-dates-row') && html.includes('raw-data-wrapper')) {
+        status = 'found'; // IP/ASN — treat as registered for filtering
+      }
+
+      item.setAttribute('data-status', status);
+      if (status === 'available') counts.available++;
+      else if (status === 'registered' || status === 'found') counts.registered++;
+      else if (status === 'restricted') counts.restricted++;
+      else counts.error++;
+
+      // Set status badge
+      const badge = item.querySelector('.batch-status-badge');
+      if (badge) {
+        if (status === 'available') {
+          badge.className = 'batch-status-badge badge-avail';
+          badge.textContent = <?php echo json_encode($T['domain_available_badge']); ?>;
+          if (!firstAvail) firstAvail = item;
+        } else if (status === 'registered' || status === 'found') {
+          badge.className = 'batch-status-badge badge-reg';
+          badge.textContent = status === 'found' ? 'Found' : <?php echo json_encode($T['batch_registered'] ?? 'Registered'); ?>;
+        } else if (status === 'restricted') {
+          badge.className = 'batch-status-badge badge-restrict';
+          badge.textContent = <?php echo json_encode($T['status_restricted']); ?>;
+        } else {
+          badge.className = 'batch-status-badge badge-err';
+          badge.textContent = <?php echo json_encode($T['no_info_found']); ?>;
+        }
+      }
+    });
+
+    // Auto-collapse for large batches
+    if (batchItems.length >= 50) {
+      batchItems.forEach(item => item.classList.add('batch-collapsed'));
+    }
+
+    // Build filter buttons
+    const filtersEl = document.getElementById('batch-filters');
+    if (filtersEl) {
+      const filterData = [
+        {key:'all', label:'All', count:batchItems.length},
+        {key:'available', label:<?php echo json_encode($T['domain_available_badge']); ?>, count:counts.available},
+        {key:'registered', label:<?php echo json_encode($T['batch_registered'] ?? 'Registered'); ?>, count:counts.registered},
+        {key:'restricted', label:<?php echo json_encode($T['status_restricted']); ?>, count:counts.restricted},
+        {key:'error', label:'Error', count:counts.error},
+      ];
+      filterData.forEach(f => {
+        if (f.count === 0 && f.key !== 'all') return;
+        const btn = document.createElement('button');
+        btn.className = 'batch-filter-btn' + (f.key === 'all' ? ' active' : '');
+        btn.innerHTML = f.label + '<span class="filter-count">' + f.count + '</span>';
+        btn.onclick = () => {
+          filtersEl.querySelectorAll('.batch-filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          batchItems.forEach(item => {
+            if (f.key === 'all') {
+              item.classList.remove('batch-hidden');
+            } else {
+              item.classList.toggle('batch-hidden', item.getAttribute('data-status') !== f.key);
+            }
+          });
+        };
+        filtersEl.appendChild(btn);
+      });
+    }
+
+    // Jump to first available
+    if (firstAvail && counts.available > 0) {
+      const jumpEl = document.getElementById('batch-available-jump');
+      const jumpTxt = document.getElementById('batch-jump-text');
+      if (jumpEl && jumpTxt) {
+        jumpTxt.textContent = counts.available + ' available domain' + (counts.available > 1 ? 's' : '') + ' found — click to jump';
+        jumpEl.style.display = 'block';
+        jumpEl.onclick = () => {
+          // Filter to available first
+          filtersEl.querySelectorAll('.batch-filter-btn').forEach(b => b.classList.remove('active'));
+          const availBtn = filtersEl.querySelector('.batch-filter-btn:nth-child(2)');
+          if (availBtn) availBtn.click();
+          firstAvail.scrollIntoView({behavior:'smooth', block:'center'});
+          firstAvail.style.boxShadow = '0 0 0 3px var(--clr-success)';
+          setTimeout(() => firstAvail.style.boxShadow = '', 2000);
+        };
+      }
+    }
+
+    // Expand / Collapse all
+    const expBtn = document.getElementById('batch-expand-all');
+    const colBtn = document.getElementById('batch-collapse-all');
+    if (expBtn) expBtn.onclick = () => batchItems.forEach(i => i.classList.remove('batch-collapsed'));
+    if (colBtn) colBtn.onclick = () => batchItems.forEach(i => i.classList.add('batch-collapsed'));
+  }
+
+  window.toggleBatchItem = el => el.classList.toggle('batch-collapsed');
 })();
 </script>
 </body>

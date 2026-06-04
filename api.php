@@ -1,6 +1,7 @@
 <?php
 /**
- * api.php — Super Whois API v2.0
+ * api.php — Super Whois v2.2.1
+ * Uses whois_core.php for all shared logic.
  */
 define('RATE_LIMIT',  60);
 define('RATE_WINDOW', 3600);
@@ -8,7 +9,7 @@ define('RATE_STORE',  __DIR__ . '/rate_store');
 define('TRUST_PROXY', true);
 define('LOG_DIR',     __DIR__ . '/logs');
 define('LOG_KEEP_DAYS', 30);
-define('API_VERSION',               '2.0');
+define('API_VERSION',               '2.1');
 define('API_MAX_QUERY_LENGTH',      253);
 define('API_ALLOW_UNAUTHENTICATED', true);
 define('API_KEYS_FILE',             __DIR__ . '/api_keys.php');
@@ -24,6 +25,7 @@ if (!function_exists('idn_to_ascii')) {
 
 require_once __DIR__ . '/whois_core.php';
 require_once __DIR__ . '/languages.php';
+require_once __DIR__ . '/whois_servers.php';
 
 // ── Language ───────────────────────────────────────────────────────────────
 $supported_langs = ['en', 'zh-cn', 'zh-tw'];
@@ -77,20 +79,59 @@ if (!$isAuthenticated) {
 }
 
 // ── Query ─────────────────────────────────────────────────────────────────
-$query = sanitizeQuery(trim(substr($_GET['q'], 0, API_MAX_QUERY_LENGTH)));
-if ($query === '') apiError(400, 'Invalid or empty query.');
+$rawQ = trim(substr($_GET['q'], 0, 10000));
 
-$result = dispatchApiQuery($query);
+// Batch mode: split by comma or newline
+$queries = preg_split('/[,\n]+/', $rawQ);
+$queries = array_filter(array_map('trim', $queries));
+$queries = array_values($queries);
 
-// Append DNS records if requested
-if (!empty($_GET['dns']) && $_GET['dns'] === 'true' && $result['query_type'] === 'domain') {
-    $dnsQ = sanitizeQuery($result['query']);
-    if ($dnsQ !== '' && classifyQuery($dnsQ) === 'domain') {
-        $result['dns_records'] = lookupDNSRecords($dnsQ);
+if (empty($queries)) apiError(400, 'Invalid or empty query.');
+
+$dnsFlag = !empty($_GET['dns']) && $_GET['dns'] === 'true';
+
+if (count($queries) === 1) {
+    // Single query — backward-compatible response (flat JSON)
+    $query = sanitizeQuery($queries[0]);
+    if ($query === '') apiError(400, 'Invalid or empty query.');
+
+    $result = dispatchApiQuery($query, $whoisServers);
+
+    if ($dnsFlag && $result['query_type'] === 'domain') {
+        $dnsQ = sanitizeQuery($result['query']);
+        if ($dnsQ !== '' && classifyQuery($dnsQ) === 'domain') {
+            $result['dns_records'] = lookupDNSRecords($dnsQ);
+        }
     }
-}
 
-echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+} else {
+    // Batch mode — array response
+    $results = [];
+    foreach ($queries as $q) {
+        $q = sanitizeQuery($q);
+        if ($q === '') {
+            $results[] = ['query' => $q, 'status' => 'error', 'error' => 'Invalid query.'];
+            continue;
+        }
+        $result = dispatchApiQuery($q, $whoisServers);
+        if ($dnsFlag && ($result['query_type'] ?? '') === 'domain') {
+            $dnsQ = sanitizeQuery($result['query']);
+            if ($dnsQ !== '' && classifyQuery($dnsQ) === 'domain') {
+                $result['dns_records'] = lookupDNSRecords($dnsQ);
+            }
+        }
+        $results[] = $result;
+    }
+
+    echo json_encode([
+        'batch'       => true,
+        'count'       => count($results),
+        'api_version' => API_VERSION,
+        'timestamp'   => gmdate('Y-m-d\TH:i:s\Z'),
+        'results'     => $results,
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
 exit();
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -102,7 +143,7 @@ function apiError(int $code, string $message): void {
     exit();
 }
 
-function dispatchApiQuery(string $query): array {
+function dispatchApiQuery(string $query, array $whoisServers): array {
     $base = [
         'query'        => $query,
         'query_type'   => '',
@@ -144,7 +185,6 @@ function dispatchApiQuery(string $query): array {
         return $base;
 
     } elseif ($type === 'domain') {
-        require_once __DIR__ . '/whois_servers.php';
         $base['query_type'] = 'domain';
         $asciiQ   = idn_to_ascii($query, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46);
         $apex     = detectApexDomain($query);
@@ -336,7 +376,7 @@ $apiKeys = [
       <tr>
         <td><code>q</code></td>
         <td><span class="badge-req"><?php echo $h($T['api_param_required']); ?></span></td>
-        <td><?php echo $T['api_param_q_desc']; ?></td>
+        <td><?php echo $T['api_param_q_desc']; ?> <?php echo $T['api_batch_param_desc'] ?? 'Separate multiple queries with commas or newlines for batch mode.'; ?></td>
       </tr>
       <tr>
         <td><code>key</code></td>
@@ -366,6 +406,8 @@ $apiKeys = [
     <div class="endpoint-box"><span class="method">GET</span><?php echo $h($baseUrl); ?>?q=AS15169</div>
     <p class="sub-heading"><?php echo $h($T['api_endpoint_dns']); ?></p>
     <div class="endpoint-box"><span class="method">GET</span><?php echo $h($baseUrl); ?>?q=google.com&amp;dns=true</div>
+    <p class="sub-heading"><?php echo $h($T['api_endpoint_batch'] ?? 'Batch lookup'); ?></p>
+    <div class="endpoint-box"><span class="method">GET</span><?php echo $h($baseUrl); ?>?q=google.com,github.com,cloudflare.com</div>
   </div>
 
   <div class="illustrate-card doc-section">
@@ -419,6 +461,20 @@ $apiKeys = [
   </div>
 
   <div class="illustrate-card doc-section">
+    <div class="card-header"><h2><?php echo $h($T['api_batch_sample_title'] ?? 'Batch Response — <code>api.php?q=google.com,github.com</code>'); ?></h2></div>
+    <div class="json-block">{
+  "batch": true,
+  "count": 2,
+  "api_version": "<?php echo API_VERSION; ?>",
+  "timestamp": "2025-01-15T10:23:45Z",
+  "results": [
+    { "query": "google.com", "query_type": "domain", "status": "registered", "..." : "..." },
+    { "query": "github.com", "query_type": "domain", "status": "registered", "..." : "..." }
+  ]
+}</div>
+  </div>
+
+  <div class="illustrate-card doc-section">
     <div class="card-header"><h2><?php echo $h($T['api_section_errors']); ?></h2></div>
     <table class="param-table">
       <tr><th>HTTP</th><th><?php echo $h($T['api_error_meaning']); ?></th></tr>
@@ -432,7 +488,7 @@ $apiKeys = [
   <div class="illustrate-card doc-section">
     <div class="card-header"><h2><?php echo $h($T['api_section_try']); ?></h2></div>
     <div class="try-box">
-      <input type="text" class="try-input" id="try-input" placeholder="google.com, 8.8.8.8, AS15169" value="google.com">
+      <input type="text" class="try-input" id="try-input" placeholder="google.com, 8.8.8.8, AS15169 (comma = batch)" value="google.com">
       <button class="try-btn" onclick="runTry()">
         <i class="fa-solid fa-play"></i> <?php echo $h($T['api_try_send']); ?>
       </button>
@@ -461,6 +517,8 @@ print(data['status'])
 print(data['data']['registrar'])</div>
     <p class="sub-heading" style="margin-top:16px"><?php echo $h($T['api_example_curl']); ?></p>
     <div class="json-block">curl "<?php echo $h($baseUrl); ?>?q=google.com" | python3 -m json.tool</div>
+    <p class="sub-heading" style="margin-top:16px"><?php echo $h($T['api_example_batch'] ?? 'Batch Query (cURL)'); ?></p>
+    <div class="json-block">curl "<?php echo $h($baseUrl); ?>?q=google.com,github.com,cloudflare.com" | python3 -m json.tool</div>
   </div>
 </main>
 

@@ -11,7 +11,7 @@ function get_language_strings(string $lang = 'en'): array {
         'header_title'      => 'Super Whois',
 
         // Search form
-        'placeholder'       => 'e.g. google.com,  8.8.8.8,  or  AS15169',
+        'placeholder'       => 'e.g. google.com, 8.8.8.8, or AS15169 (comma = batch)',
         'search_button'     => 'Search',
 
         // Result card
@@ -116,7 +116,7 @@ function get_language_strings(string $lang = 'en'): array {
         'api_param_name'           => 'Parameter',
         'api_param_required'       => 'Required',
         'api_param_desc'           => 'Description',
-        'api_param_q_desc'         => 'The target to look up. Accepts a domain name (e.g. <code>google.com</code>), IPv4 / IPv6 address, or ASN (e.g. <code>AS15169</code>).',
+        'api_param_q_desc'         => 'The target to look up. Accepts a domain name (e.g. <code>google.com</code>), IPv4 / IPv6 address, or ASN (e.g. <code>AS15169</code>). Separate with commas or newlines for batch mode.',
         'api_param_key_desc'       => 'API key. Bypasses rate limiting when valid.',
         'api_section_endpoints'    => 'Endpoints & Examples',
         'api_endpoint_domain'      => 'Domain lookup',
@@ -168,6 +168,16 @@ function get_language_strings(string $lang = 'en'): array {
         'api_col_type'             => 'Type',
         'api_col_desc'             => 'Description',
         'api_footer_lookup'        => 'Lookup Tool',
+        'api_batch_param_desc'     => 'Separate multiple queries with commas or newlines for batch mode. Single query returns flat JSON; batch returns an array.',
+        'api_endpoint_batch'       => 'Batch lookup',
+        'api_batch_sample_title'   => 'Batch Response — <code>api.php?q=google.com,github.com</code>',
+        'api_example_batch'        => 'Batch Query (cURL)',
+
+        // Batch & SK
+        'batch_count'               => 'Batch: %d queries',
+        'batch_separator_hint'      => 'Separate multiple queries with commas or newlines',
+        'sk_placeholder'            => 'SK code (optional)',
+        'batch_registered'          => 'Registered',
     ];
 
     // ── Simplified Chinese (zh-cn / zh) ─────────────────────────────────────
@@ -177,7 +187,7 @@ function get_language_strings(string $lang = 'en'): array {
         'meta_description' => '快速、现代化的域名、IP 及 ASN WHOIS 查询工具，提供清晰、易读的结构化结果。',
 
         // Search
-        'placeholder'  => '例如: google.com、8.8.8.8 或 AS15169',
+        'placeholder'  => '例如: google.com、8.8.8.8 或 AS15169（逗号分隔 = 批量查询）',
         'search_button' => '查询',
 
         // Result
@@ -281,7 +291,7 @@ function get_language_strings(string $lang = 'en'): array {
         'api_param_name'           => '参数',
         'api_param_required'       => '必填',
         'api_param_desc'           => '说明',
-        'api_param_q_desc'         => '查询目标。支持域名（如 <code>google.com</code>）、IPv4/IPv6 地址，或 ASN（如 <code>AS15169</code>）。',
+        'api_param_q_desc'         => '查询目标。支持域名（如 <code>google.com</code>）、IPv4/IPv6 地址，或 ASN（如 <code>AS15169</code>）。逗号或换行分隔多个查询可进入批量模式。',
         'api_param_key_desc'       => 'API Key，有效时可绕过速率限制。',
         'api_section_endpoints'    => '接口与示例',
         'api_endpoint_domain'      => '域名查询',
@@ -333,6 +343,16 @@ function get_language_strings(string $lang = 'en'): array {
         'api_col_type'             => '类型',
         'api_col_desc'             => '说明',
         'api_footer_lookup'        => '查询工具',
+        'api_batch_param_desc'     => '多个查询用逗号或换行分隔即可进入批量模式。单个查询返回平铺 JSON；批量查询返回数组。',
+        'api_endpoint_batch'       => '批量查询',
+        'api_batch_sample_title'   => '批量响应 — <code>api.php?q=google.com,github.com</code>',
+        'api_example_batch'        => '批量查询 (cURL)',
+
+        // Batch & SK
+        'batch_count'               => '批量查询: %d 个',
+        'batch_separator_hint'      => '多个查询用逗号或换行分隔',
+        'sk_placeholder'            => 'SK 码（可选）',
+        'batch_registered'          => '已注册',
     ];
 
     // ── Traditional Chinese (zh-tw) ─────────────────────────────────────────
@@ -342,7 +362,7 @@ function get_language_strings(string $lang = 'en'): array {
         'meta_description' => '快速、現代化的域名、IP 及 ASN WHOIS 查詢工具，提供清晰易讀的結構化結果。',
 
         // Search
-        'placeholder'  => '例如: google.com、8.8.8.8 或 AS15169',
+        'placeholder'  => '例如: google.com、8.8.8.8 或 AS15169（逗號分隔 = 批次查詢）',
         'search_button' => '查詢',
 
         // Result
@@ -446,7 +466,7 @@ function get_language_strings(string $lang = 'en'): array {
         'api_param_name'           => '參數',
         'api_param_required'       => '必填',
         'api_param_desc'           => '說明',
-        'api_param_q_desc'         => '查詢目標。支援域名（如 <code>google.com</code>）、IPv4/IPv6 位址，或 ASN（如 <code>AS15169</code>）。',
+        'api_param_q_desc'         => '查詢目標。支援域名（如 <code>google.com</code>）、IPv4/IPv6 位址，或 ASN（如 <code>AS15169</code>）。逗號或換行分隔多個查詢可進入批次模式。',
         'api_param_key_desc'       => 'API Key，有效時可繞過速率限制。',
         'api_section_endpoints'    => '介面與範例',
         'api_endpoint_domain'      => '域名查詢',
@@ -498,6 +518,16 @@ function get_language_strings(string $lang = 'en'): array {
         'api_col_type'             => '類型',
         'api_col_desc'             => '說明',
         'api_footer_lookup'        => '查詢工具',
+        'api_batch_param_desc'     => '多個查詢用逗號或換行分隔即可進入批次模式。單個查詢返回平鋪 JSON；批次查詢返回陣列。',
+        'api_endpoint_batch'       => '批次查詢',
+        'api_batch_sample_title'   => '批次回應 — <code>api.php?q=google.com,github.com</code>',
+        'api_example_batch'        => '批次查詢 (cURL)',
+
+        // Batch & SK
+        'batch_count'               => '批次查詢: %d 個',
+        'batch_separator_hint'      => '多個查詢用逗號或換行分隔',
+        'sk_placeholder'            => 'SK 碼（可選）',
+        'batch_registered'          => '已註冊',
     ];
 
     // Backward compatibility: 'zh' maps to 'zh-cn'

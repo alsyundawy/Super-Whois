@@ -1,6 +1,6 @@
 <?php
 /**
- * whois_core.php — Super Whois v2.2.0 shared library (entry point)
+ * whois_core.php — Super Whois v2.2.1 shared library (entry point)
  *
  * Loads modular components from lib/. No functions defined here.
  * index.php and api.php require this file as before — no changes needed.
